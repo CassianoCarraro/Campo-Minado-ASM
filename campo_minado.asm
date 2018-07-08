@@ -1,117 +1,209 @@
-;org 100h
 name "campo_minado"
 .model small
 
 .data
-    matsize equ 5 
-    msg_nivel db "selecione o nivel desejado",10,13,"1-Facil",10,13,"2-Dificil",10,13,"$"     
-
+	matsize equ 5
+	msg_nivel db "Selecione o nivel desejado",10,13,"1-Facil",10,13,"2-Dificil",10,13,"$"
+	msg_linha db "Linha:",10,13,"$"
+	msg_coluna db 10,13,"Coluna:",10,13,"$"
+	msg_parabens db "PARABENS!$"
+	msg_perdeu db "PERDEU!$"
+	mat db 25 dup('0')
+	mat_tela db 25 dup('?')
+	dificuldade db 0
 .code
-;mov ax, 3     ; Modo de texto 80x25
-;int 10h       ; Interrupção para abrir console
+mov ax, @data ; Move o endereco do segmento de dados para AX
+mov ds, ax ; Seta o segmento de dados do programa no DS
 
-;jmp d_campo_minado
+mov dx, offset msg_nivel ; Move o endereco inicial da mensagem para escolha de nivel
+call PRINTFDB
+call SCANFDIF
+call GERARBOMB
 
-;d_campo_minado:
-;mov ax, 0b800h ; Seta o valor 800h no registrador ax para acessar o dipositivo VGA
-;mov ds, ax ; Seta o ax no registrador de segmento de dados
+laco_jogo:
+lea di, mat_tela ; Seta o DI com a posicao inicial do endereco da matriz de tela
+call MOSTRAMAT
 
-;CALL INITMAT
-;add bx, 120 ; Pula 150 (75 * 2) bytes para quebrar a linha da tela
-;pop cx
-;fim:
-;ret
-mov ax, @data
-mov ds,ax	
-CALL PRINTFDB
-CALL SCANFDB
-CALL INITMAT
-CALL GERARBOMB
-;CALL INITMATTELA
-;CALL MOSTRAMAT
-;CALL SCANF
+mov dx, offset msg_linha ; Move o endereco inicial da mensagem para informar a linha
+call PRINTFDB
+call SCANF
+push ax
 
-;CALL RANDNUMB
+mov dx, offset msg_coluna ; Move o endereco inicial da mensagem para informar a coluna
+call PRINTFDB
+call SCANF
+push ax
+
+pop bx ; Desimpilha o valor lido para coluna no BX
+pop ax ; Desempilha o valor lido para linha no AX
+mov ah, bl ; Valor adiciona o valor da coluna no AH, AL tera o valor da linha
+
+call LIBERACAMPO
+cmp dl, 1 ; Verifica se bomba foi encontrada
+je bomba_encontrada ; Se bomba foi encontrada jogo e finalizado com mensagem de derrota
+
+call VERFIMJOGO
+cmp dl, 1 ; Verifica se todos os campos livres ja foram descobertos
+je fim_jogo ; Se todos os campos foram descobertos jogo e finalizado com mensagem de vitoria
+
+jmp laco_jogo ; Laco principal do jogo que voltar a solicitar para o usuario digitar linha e coluna ate que o jogo seja finalizado
+
+bomba_encontrada:
+call FIMJOGOBOMBA
+jmp fim
+
+fim_jogo:
+call FIMJOGO
+jmp fim
+
+fim:
 .exit
 
-INITMAT PROC
+LIBERACAMPO PROC ; AL = linha, AH = coluna, DL = retorno se uma bomba foi encontrada
 	pusha
-    ;mov ax, @data
-    ;mov ds, ax
-    mov di, 0d ; Seta o DI como 0 posicao inicial da primeira matriz
 
-    mov cx, matsize ; Inicializa registrador para laço
-    laco_linha:
-    push cx ; Empilha valor armazenado no cx do laco linha
+	dec al ; Descrementa 1 em AL para realizar o calculo de deslocamento
+	mov bh, ah ; Move o valor da coluna AH para BH, pois a multiplicacao modificara o valor
+	mov bl, matsize ; Move o valor do tamanho da matriz para bl para a multiplocacao
+	mul bl
+	dec bh ; Decrementa 1 em BH para realizar o calculo de deslocamento
+	add al, bh ; Obtem o deslocamento pelo valor da coluna - 1 adicionado ao valor da linha - 1 multiplicado pelo tamanho da matriz
+	mov ah, 0
 
-    mov cx, matsize
-    laco_coluna:
-    mov ds:[di], 0 ; Adiciona o valor 0 indicando a posicao inicial da primeira matriz
-    add di, 1 ; Avanca 1 posicao no acesso a matriz
-    loop laco_coluna
+	lea di, mat
+	add di, ax ; Deslocamento
+	cmp ds:[di], '1' ; Verifica se ha bomba na posicao indicada
+	je encontrou_bomba ; Se encontrou bomba retorna
+	lea di, mat_tela ; Seta o endereco da matriz de tela no DI
+	add di, ax ; Realiza calculo de deslocamento
+	mov ds:[di], '0' ; Seta 0 no local livre
+	jmp fim_liberacampo
+	encontrou_bomba:
+	popa
+	mov dl, 1 ; Retorno identificando que foi encontrado uma bomba
+	ret
+	fim_liberacampo:
+	popa
+	mov dl, 0 ; Retorno identificando que nao foi encontrado uma bomba
+	ret
+LIBERACAMPO endp
 
-    pop cx ; Desempilha valor armazenado do laço linha
-
-    loop laco_linha
-    popa
-
-    ret
-INITMAT endp
-
-INITMATTELA PROC
+VERFIMJOGO PROC ; Procedimento verifica se todos os campos livres foram descobertos um booleano e retornado no registrador DL
 	pusha
-	;mov ax, @data ; Move o endereco do segmento de dados para AX
-    ;mov ds, ax ; Inicializa o DS com o valor de AX
-    mov di, 25d ; Seta o valor 25 indicando a posicao inicial da segunda matriz
 
-    mov cx, matsize ; Inicializa registrador para laço
-    laco_linha2:
-    push cx ; Empilha valor armazenado no cx do laço linha
+	mov dx, 0 ; Inicializa dx com 0 para ser utilizado como deslocamento
+	mov cx, matsize ; Inicializa registrador para laço
 
-    mov cx, matsize
-    laco_coluna2:
-    mov ds:[di], '?' ; Adiciona o valor ? na posicao de memoria alocada para a matriz
-    add di, 1 ; Avanca 1 posicao no acesso a matriz
-    loop laco_coluna2
+	laco_linha_ver:
+	push cx ; Empilha valor armazenado no cx do laço linha
 
-    pop cx ; Desempilha valor armazenado do laço linha
-    loop laco_linha2
-    popa
+	mov cx, matsize ; Inicializa registrador para laço
+	laco_coluna_ver:
 
-    ret
-INITMATTELA endp
+	lea di, mat ; Seta o DI com o endereco da matriz
+	add di, dx ; Realiza o calculo de deslocamento
+	mov al, ds:[di] ; Move o valor da matriz para AL
+	lea di, mat_tela ; Seta o DI com o endereco da matriz da tela
+	add di, dx ; Realiza o calculo de deslocamento
+	mov bl, ds:[di] ; Move o valor da matriz para BL
 
-MOSTRAMAT PROC
+	cmp al, '0' ; Verifica se o campo e livre
+	jne continua ; Se nao for livre pula a verificacao
+
+	cmp al, bl ; Se for livre compara se o valor da tela e igual a matriz original
+	jne campo_livre_n_revelado ; Se nao for igual ha campos livres que ainda nao foram descobertos
+
+	continua:
+	add dl, 1 ; Avanca 1 posicao no acesso a matriz
+	loop laco_coluna_ver
+
+	pop cx ; Desempilha valor armazenado do laço linha
+	loop laco_linha_ver
+
+	popa
+	mov dl, 1 ; Seta DL como 1 indicando que todos os campos livres foram descobertos
+	ret
+
+	campo_livre_n_revelado:
+	pop cx ; Desempilha o cx
+	popa
+	mov dl, 0 ; Seta DL como 0 indicando que ha campos a serem descobertos
+	ret
+VERFIMJOGO endp
+
+FIMJOGO PROC
+	call CLS
+
+	lea di, mat ; Seta o DI com a posicao inicial do endereco da matriz
+	call MOSTRAMAT
+
+	mov dx, offset msg_parabens
+	call PRINTFDB
+
+	ret
+FIMJOGO endp
+
+FIMJOGOBOMBA PROC
+	call CLS
+
+	lea di, mat ; Seta o DI com a posicao inicial do endereco da matriz
+	call MOSTRAMAT
+
+	mov dx, offset msg_perdeu
+	call PRINTFDB
+
+	ret
+FIMJOGOBOMBA endp
+
+MOSTRAMAT PROC ; Adicionar o endereco da matriz no DI para impressao
 	pusha
-	;mov ax, @data ; Move o endereco do segmento de dados para AX
-    ;mov ds, ax ; Inicializa o DS com o valor de AX
-    mov di, 25d ; Seta o valor 25 indicando a posicao inicial da segunda matriz
 
-    mov cx, matsize ; Inicializa registrador para laço
-    laco_linha3:
-    mov dh, matsize ; Seta o tamanho da matriz do DH
-    sub dh, cl ; Diminui o valor pelo tamanho da matriz para se obter a linha correta (Ex: estado inicial cx=5,dh=0)
-    push cx ; Empilha valor armazenado no cx do laço linha
+	mov cx, matsize ; Inicializa registrador para laço
 
-    mov cx, matsize
-    laco_coluna3:
-    mov dl, matsize ; Seta o tamanho da matriz do DH
-    sub dl, cl ; Diminui o valor pelo tamanho da matriz para se obter a coluna correta (Ex: estado inicial cx=5,dh=0)
-    mov al, ds:[di] ; Adiciona o caractere da matriz tela no registrador para impressao
+	laco_linha:
+	mov dh, matsize ; Seta o tamanho da matriz do DH
+	inc dh ; Incrementa 1 na linha para cabecalho
+	sub dh, cl ; Diminui o valor pelo tamanho da matriz para se obter a linha correta para impressao (Ex: estado inicial cx=5,dh=0)
 
-    CALL PRINTFA ; Chama procedimento de impressao na tela
+	mov dl, 0 ; Move a coluna para pos 0 para impressao do cabecalho
+	mov al, dh ; Move a lina atual para AL para ser impressa na tela
+	add al, 48d ; Adiciona 48 inicio dos caracteres da tabela ASCII
+	call PRINTFA
 
-    add di, 1 ; Avanca 1 posicao no acesso a matriz
-    loop laco_coluna3
+	push cx ; Empilha valor armazenado no cx do laço linha
 
-    pop cx ; Desempilha valor armazenado do laço linha
-    loop laco_linha3
+	mov cx, matsize
+	laco_coluna:
+	mov dl, matsize ; Seta o tamanho da matriz do DH
+	inc dl
+	sub dl, cl ; Diminui o valor pelo tamanho da matriz para se obter a coluna correta para impressao (Ex: estado inicial cx=5,dh=0)
+
+	push dx ; Empilha o valor de dx pois sera alterado para impressao do cabecalho
+	mov dh, 0 ; Move o DH (linha) para 0
+	mov al, dl ; Move a coluna atual para AL para ser impressa na tela
+	add al, 48d ; Adiciona 48 inicio dos caracteres da tabela ASCII
+	call PRINTFA
+	pop dx
+
+	mov al, ds:[di] ; Adiciona o caractere da matriz tela no registrador para impressao
+
+	call PRINTFA ; Chama procedimento de impressao na tela
+
+	add di, 1 ; Avanca 1 posicao no acesso a matriz
+	loop laco_coluna
+
+	pop cx ; Desempilha valor armazenado do laço linha
+	loop laco_linha
+
+	inc dh
+	call QUEBRALINHA
+
 	popa
 
 	ret
 MOSTRAMAT endp
 
-SCANF PROC
+SCANF PROC ; Le um inteiro e armazena o valor no AL
 mov dl, 10
 mov bl, 0
 
@@ -129,45 +221,11 @@ scanNum:
 	mov bl, al ; Move o valor final para BL
 	jmp scanNum
 	f:
-	mov ax, 2h ; Move 2h para limpar a tela
-	int 10h ; Realiza interrupcao
 	mov al, bl ; Move o resultado lido para AL
 	mov ah, 0
 
 	ret
 SCANF endp
-
-;PRINTF PROC
-;	mov dx, 0
-;	mov ah, 0
-;	cmp ax, 0
-;	jne print_ax_r
-;	push ax
-;	mov al, '0'
-;	mov ah, 0Eh
-;	int 10h
-;	pop ax
-;
-;	ret
-;
-;	print_ax_r:
-;	pusha
-;	mov dx, 0
-;	cmp ax, 0
-;	je pn_done
-;	mov bx, 10
-;	div bx
-;	call print_ax_r
-;	mov ax, dx
-;	add al, 30h
-;	mov ah, 0eh
-;	int 10h
-;	jmp pn_done
-;	pn_done:
-;	popa
-;
-;	ret
-;PRINTF endp
 
 PRINTFA PROC ; Imprime na tela caracteres da tabela ASCII (AL identifica o caractere DH linha da tela e DL coluna)
 	pusha
@@ -181,11 +239,10 @@ PRINTFA PROC ; Imprime na tela caracteres da tabela ASCII (AL identifica o carac
 	ret
 PRINTFA endp
 
-PRINTFDB PROC 
+PRINTFDB PROC ; Imprime na tela mensagens declaradas no segmento de dados (DX deve ser o endereco inicial da msg)
 	pusha
-	
-	mov ah, 9 
-	mov dx, offset msg_nivel
+
+	mov ah, 9
 	int 21h
 	popa
 
@@ -193,69 +250,80 @@ PRINTFDB PROC
 PRINTFDB endp
 
 RANDNUMB PROC
-    pusha
-    
-    mov ah, 2ch ; Move o valor 2CH para o registrador AH para pegar a hora do sistema
-    int 21h ; Realiza a interrupcao
-    mov al, dl ; Move o valor DL correspondente a 1/100 segundos para o AL
-    mov dx, 0 ; Zera o DX que recebera o resultado do resto da divisao
-    mov bx, 25d ; Move o 25 para o BX que sera utilizado como denominador da divisao
-    div bx ; Realiza a divisao pelo valor em BX o numero pseudo aleatorio ficara no registrador DX         
-    mov di,dx
-    mov ds:[di],01h
-    mov al,ds:[di]
-    popa
+	pusha
 
-    ret
+	mov ah, 2ch ; Move o valor 2CH para o registrador AH para pegar a hora do sistema
+	int 21h ; Realiza a interrupcao
+	mov al, dl ; Move o valor DL correspondente a 1/100 segundos para o AL
+	mov dx, 0 ; Zera o DX que recebera o resultado do resto da divisao
+	mov bx, 25d ; Move o 25 para o BX que sera utilizado como denominador da divisao
+	div bx ; Realiza a divisao pelo valor em BX o numero pseudo aleatorio ficara no registrador DX
+	mov di, dx ; Move a posição aleatoria gerada para DI
+	lea ax, mat ; Carrega o endereco para ax
+	add di, ax ; Deslocamento
+	mov ds:[di], '1' ; Seta 1 indicando que existe bomba nessa posicao por meio do deslocamento do endereco efetivo da mat + posicao aleatoria gerada
+	popa
+
+	ret
 RANDNUMB endp
 
-SCANFDB PROC
-    pusha
-    mov dl, 10
-    mov bl, 0
-    
-    scanDig:
-    	mov ah, 01h ; Aciona modo de leitura de caracteres resultado sera armazenado no AL
-    	int 21h ; Realiza a interrupcao para a leitura dos caracteres
-    	cmp al, 49 ; Compara o valor digitado no input com o cod do modo facil(1)
-    	je  dif_facil ;  Pula para a rotina de guardar a dificuldade facil  
-    	cmp al, 50 ; Compara o valor digitado no input com o cod do modo dificil(2)
-    	je  dif_dificil ; Pula para a rotina de guardar a dificuldade dificil
-    	cmp al, 13 ; Compara o valor digitado no input com o ENTER
-    	je  limpa_tela ; Se for ENTER pula para o label f
-    	jmp scanDig
-    	dif_facil:
-    	mov di, 51d; Move codigo da dificuldade facil para a posicao correta
-        mov ds:[di],1h
-    	jmp scanDig
-        dif_dificil:     
-        mov di, 51d; Move codigo da dificuldade dificil para a posicao correta
-        mov ds:[di],2h
-        jmp scanDig
-        limpa_tela:
-        mov ax, 2h ; Move 2h para limpar a tela
-    	int 10h ; Realiza interrupcao  
-    	popa
-    	ret  	
-SCANFDB endp
+SCANFDIF PROC
+	pusha
+	mov dl, 10
+	mov bl, 0
 
-GERARBOMB PROC  
-    pusha
-    mov di,51d  ; Busca o endereco reservado para a dificuldade
-    mov al, ds:[di] ;Guarda a dificuldade no al
-    cmp al,1   ;Verifica se � o modo facil
-    je facil
-    cmp al,2 ;Verifica se � o modo dificil  
-    je dificil
-    facil:
-        mov cx,5
-    dificil:
-        mov cx,15
-    push cx        
-    gera_numero:
-        CALL RANDNUMB ;Realiza o procedimento de numero pseudo aleatorio e coloca na matriz nao visivel  
-        loop gera_numero  
-    pop cx
-    popa   
-    ret
-GERARBOMB endp    
+	scanDig:
+		mov ah, 01h ; Aciona modo de leitura de caracteres resultado sera armazenado no AL
+		int 21h ; Realiza a interrupcao para a leitura dos caracteres
+		cmp al, 49 ; Compara o valor digitado no input com o cod do modo facil(1)
+		je  scanDig ;  Pula para a rotina de guardar a dificuldade facil
+		cmp al, 50 ; Compara o valor digitado no input com o cod do modo dificil(2)
+		je  dif_dificil ; Pula para a rotina de guardar a dificuldade dificil
+		cmp al, 13 ; Compara o valor digitado no input com o ENTER
+		je  limpa_tela ; Se for ENTER pula para o label f
+		jmp scanDig
+		dif_dificil:
+		mov dificuldade, 1
+		jmp scanDig
+		limpa_tela:
+		call CLS
+		popa
+		ret
+SCANFDIF endp
+
+CLS PROC
+	mov ax, 2h ; Move 2h para limpar a tela
+	int 10h ; Realiza interrupcao
+
+	ret
+CLS endp
+
+QUEBRALINHA PROC ; Bloco de comandos para impressao da quebra de linha
+	mov al, 10
+	call PRINTFA
+	mov al, 13
+	call PRINTFA
+
+	ret
+QUEBRALINHA endp
+
+GERARBOMB PROC
+	pusha
+	;mov di,51d  ; Busca o endereco reservado para a dificuldade
+	;mov al, ds:[di] ;Guarda a dificuldade no al
+	cmp dificuldade, 0 ; Verifica se e o modo facil
+	je facil
+	cmp dificuldade, 1 ; Verifica se e o modo dificil
+	je dificil
+	facil:
+		mov cx,5
+	dificil:
+		mov cx,15
+	push cx
+	gera_numero:
+		call RANDNUMB ; Realiza o procedimento de numero pseudo aleatorio e coloca na matriz nao visivel
+		loop gera_numero
+	pop cx
+	popa
+	ret
+GERARBOMB endp
