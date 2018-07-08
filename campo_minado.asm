@@ -1,7 +1,10 @@
+;org 100h
 name "campo_minado"
+.model small
 
 .data
-    matsize equ 5
+    matsize equ 5 
+    msg_nivel db "selecione o nivel desejado",10,13,"1-Facil",10,13,"2-Dificil",10,13,"$"     
 
 .code
 ;mov ax, 3     ; Modo de texto 80x25
@@ -18,18 +21,23 @@ name "campo_minado"
 ;pop cx
 ;fim:
 ;ret
+mov ax, @data
+mov ds,ax	
+CALL PRINTFDB
+CALL SCANFDB
+CALL INITMAT
+CALL GERARBOMB
+;CALL INITMATTELA
+;CALL MOSTRAMAT
+;CALL SCANF
 
-CALL INITMATTELA
-CALL MOSTRAMAT
-CALL SCANF
-;CALL INITMAT
 ;CALL RANDNUMB
 .exit
 
 INITMAT PROC
 	pusha
-    mov ax, @data
-    mov ds, ax
+    ;mov ax, @data
+    ;mov ds, ax
     mov di, 0d ; Seta o DI como 0 posicao inicial da primeira matriz
 
     mov cx, matsize ; Inicializa registrador para la√ßo
@@ -52,8 +60,8 @@ INITMAT endp
 
 INITMATTELA PROC
 	pusha
-	mov ax, @data ; Move o endereco do segmento de dados para AX
-    mov ds, ax ; Inicializa o DS com o valor de AX
+	;mov ax, @data ; Move o endereco do segmento de dados para AX
+    ;mov ds, ax ; Inicializa o DS com o valor de AX
     mov di, 25d ; Seta o valor 25 indicando a posicao inicial da segunda matriz
 
     mov cx, matsize ; Inicializa registrador para la√ßo
@@ -75,8 +83,8 @@ INITMATTELA endp
 
 MOSTRAMAT PROC
 	pusha
-	mov ax, @data ; Move o endereco do segmento de dados para AX
-    mov ds, ax ; Inicializa o DS com o valor de AX
+	;mov ax, @data ; Move o endereco do segmento de dados para AX
+    ;mov ds, ax ; Inicializa o DS com o valor de AX
     mov di, 25d ; Seta o valor 25 indicando a posicao inicial da segunda matriz
 
     mov cx, matsize ; Inicializa registrador para la√ßo
@@ -173,13 +181,81 @@ PRINTFA PROC ; Imprime na tela caracteres da tabela ASCII (AL identifica o carac
 	ret
 PRINTFA endp
 
+PRINTFDB PROC 
+	pusha
+	
+	mov ah, 9 
+	mov dx, offset msg_nivel
+	int 21h
+	popa
+
+	ret
+PRINTFDB endp
+
 RANDNUMB PROC
+    pusha
+    
     mov ah, 2ch ; Move o valor 2CH para o registrador AH para pegar a hora do sistema
     int 21h ; Realiza a interrupcao
     mov al, dl ; Move o valor DL correspondente a 1/100 segundos para o AL
     mov dx, 0 ; Zera o DX que recebera o resultado do resto da divisao
     mov bx, 25d ; Move o 25 para o BX que sera utilizado como denominador da divisao
-    div bx ; Realiza a divisao pelo valor em BX o numero pseudo aleatorio ficara no registrador DX
+    div bx ; Realiza a divisao pelo valor em BX o numero pseudo aleatorio ficara no registrador DX         
+    mov di,dx
+    mov ds:[di],01h
+    mov al,ds:[di]
+    popa
 
     ret
 RANDNUMB endp
+
+SCANFDB PROC
+    pusha
+    mov dl, 10
+    mov bl, 0
+    
+    scanDig:
+    	mov ah, 01h ; Aciona modo de leitura de caracteres resultado sera armazenado no AL
+    	int 21h ; Realiza a interrupcao para a leitura dos caracteres
+    	cmp al, 49 ; Compara o valor digitado no input com o cod do modo facil(1)
+    	je  dif_facil ;  Pula para a rotina de guardar a dificuldade facil  
+    	cmp al, 50 ; Compara o valor digitado no input com o cod do modo dificil(2)
+    	je  dif_dificil ; Pula para a rotina de guardar a dificuldade dificil
+    	cmp al, 13 ; Compara o valor digitado no input com o ENTER
+    	je  limpa_tela ; Se for ENTER pula para o label f
+    	jmp scanDig
+    	dif_facil:
+    	mov di, 51d; Move codigo da dificuldade facil para a posicao correta
+        mov ds:[di],1h
+    	jmp scanDig
+        dif_dificil:     
+        mov di, 51d; Move codigo da dificuldade dificil para a posicao correta
+        mov ds:[di],2h
+        jmp scanDig
+        limpa_tela:
+        mov ax, 2h ; Move 2h para limpar a tela
+    	int 10h ; Realiza interrupcao  
+    	popa
+    	ret  	
+SCANFDB endp
+
+GERARBOMB PROC  
+    pusha
+    mov di,51d  ; Busca o endereco reservado para a dificuldade
+    mov al, ds:[di] ;Guarda a dificuldade no al
+    cmp al,1   ;Verifica se È o modo facil
+    je facil
+    cmp al,2 ;Verifica se È o modo dificil  
+    je dificil
+    facil:
+        mov cx,5
+    dificil:
+        mov cx,15
+    push cx        
+    gera_numero:
+        CALL RANDNUMB ;Realiza o procedimento de numero pseudo aleatorio e coloca na matriz nao visivel  
+        loop gera_numero  
+    pop cx
+    popa   
+    ret
+GERARBOMB endp    
