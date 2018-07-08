@@ -309,8 +309,6 @@ QUEBRALINHA endp
 
 GERARBOMB PROC
 	pusha
-	;mov di,51d  ; Busca o endereco reservado para a dificuldade
-	;mov al, ds:[di] ;Guarda a dificuldade no al
 	cmp dificuldade, 0 ; Verifica se e o modo facil
 	je facil
 	cmp dificuldade, 1 ; Verifica se e o modo dificil
